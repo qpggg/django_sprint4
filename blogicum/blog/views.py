@@ -1,10 +1,14 @@
 from django.shortcuts import get_object_or_404, render, redirect
 from django.utils import timezone
+from django.utils.timezone import make_aware
+from django.conf import settings
+import pytz
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.forms import UserCreationForm
 from django.core.paginator import Paginator
 from django.db.models import Count
+from datetime import timedelta
 from .models import Category, Post, Comment
 from .forms import PostForm, CommentForm, UserProfileForm
 
@@ -12,8 +16,10 @@ User = get_user_model()
 
 
 def index(request):
+    # Добавляем небольшую задержку для учета времени обработки
+    now = timezone.now() + timedelta(seconds=1)
     post_list = Post.objects.filter(
-        pub_date__lte=timezone.now(),
+        pub_date__lte=now,
         is_published=True,
         category__is_published=True
     ).annotate(
@@ -112,6 +118,14 @@ def create_post(request):
     if form.is_valid():
         post = form.save(commit=False)
         post.author = request.user
+        # Если дата публикации не указана, устанавливаем текущее время
+        if not post.pub_date:
+            post.pub_date = timezone.now()
+        else:
+            # Преобразуем timezone-naive datetime в timezone-aware с учетом московского времени
+            if timezone.is_naive(post.pub_date):
+                moscow_tz = pytz.timezone(settings.TIME_ZONE)
+                post.pub_date = moscow_tz.localize(post.pub_date)
         post.save()
         return redirect('blog:profile', username=request.user.username)
 
@@ -132,7 +146,12 @@ def edit_post(request, post_id):
         instance=post
     )
     if form.is_valid():
-        form.save()
+        post = form.save(commit=False)
+        # Преобразуем timezone-naive datetime в timezone-aware с учетом московского времени
+        if post.pub_date and timezone.is_naive(post.pub_date):
+            moscow_tz = pytz.timezone(settings.TIME_ZONE)
+            post.pub_date = moscow_tz.localize(post.pub_date)
+        post.save()
         return redirect('blog:post_detail', post_id=post_id)
 
     context = {'form': form}

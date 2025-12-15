@@ -18,6 +18,8 @@ class PostForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Делаем поле pub_date необязательным
+        self.fields['pub_date'].required = False
         if self.instance and self.instance.pub_date:
             self.initial['pub_date'] = self.instance.pub_date.strftime(
                 '%Y-%m-%dT%H:%M'
